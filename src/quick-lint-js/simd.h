@@ -15,6 +15,8 @@
 #include <emmintrin.h>
 #endif
 
+#include <arm_neon.h>
+
 namespace quick_lint_js {
 #if QLJS_HAVE_X86_SSE2
 class alignas(__m128i) bool_vector_16_sse2 {
@@ -95,6 +97,59 @@ class alignas(__m128i) char_vector_16_sse2 {
   __m128i data_;
 };
 #endif
+
+// @@@ HAVE
+
+class alignas(::uint8x16_t) bool_vector_16_neon {
+ public:
+  static constexpr int size = 16;
+
+  QLJS_FORCE_INLINE explicit bool_vector_16_neon(::uint8x16_t data) noexcept
+      : data_(data) {}
+
+  QLJS_FORCE_INLINE friend bool_vector_16_neon operator|(
+      bool_vector_16_neon x, bool_vector_16_neon y) noexcept {
+    return bool_vector_16_neon(::vorrq_u8(x.data_, y.data_));
+  }
+
+  QLJS_FORCE_INLINE friend bool_vector_16_neon operator&(
+      bool_vector_16_neon x, bool_vector_16_neon y) noexcept {
+    return bool_vector_16_neon(::vandq_u8(x.data_, y.data_));
+  }
+
+  QLJS_FORCE_INLINE int find_first_false() const noexcept {
+    ::uint8x16_t magic = {
+      0x01, 0x02, 0x04, 0x08,
+      0x10, 0x20, 0x40, 0x80,
+
+      0x01, 0x02, 0x04, 0x08,
+      0x10, 0x20, 0x40, 0x80,
+    };
+    // 00 FF FF 00 00 FF FF 00  00 FF FF 00 FF 00 FF FF
+    // 00 02 04 00 00 20 40 00  00 02 04 00 10 00 40 80
+    // 66                       d6
+    ::uint8x16_t a = ::vand_u8(this->data_, magic);
+    ::vqtbl1q_u8(a,
+
+    // @@@ we can special-case returning 16. this will allow better scheduling
+    // of the loop prediction in the caller.
+
+    std::uint32_t mask = this->mask();
+    if (~mask == 0) {
+      // HACK(strager): Coerce GCC into omitting a branch due to an if check in
+      // countr_one's implementation.
+      QLJS_UNREACHABLE();
+    }
+    return countr_one(mask);
+  }
+
+  QLJS_FORCE_INLINE std::uint32_t mask() const noexcept {
+    return narrow_cast<std::uint32_t>(_mm_movemask_epi8(this->data_));
+  }
+
+ private:
+  ::uint8x16_t data_;
+};
 
 class bool_vector_1 {
  public:
