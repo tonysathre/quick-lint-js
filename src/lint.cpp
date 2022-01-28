@@ -265,10 +265,10 @@ void linter::declare_variable(scope &scope, identifier name, variable_kind kind,
       scope, name, kind, declared_scope);
 
   if (is_function_or_var && name.normalized_name() == u8"eval"_sv) {
-    scope.used_eval = false;
+    scope.used_eval_in_this_scope = false;
   }
 
-  const declared_variable *declared =
+  declared_variable *declared =
       scope.declared_variables.add_variable_declaration(name, kind,
                                                         declared_scope);
 
@@ -281,6 +281,7 @@ void linter::declare_variable(scope &scope, identifier name, variable_kind kind,
     if (name.normalized_name() != used_var.name.normalized_name()) {
       return false;
     }
+    declared->is_used = true;
     if (kind == variable_kind::_function &&
         declared_scope ==
             declared_variable_scope::declared_in_descendant_scope &&
@@ -326,6 +327,7 @@ void linter::declare_variable(scope &scope, identifier name, variable_kind kind,
              if (name.normalized_name() != used_var.name.normalized_name()) {
                return false;
              }
+             declared->is_used = true;
              switch (used_var.kind) {
              case used_variable_kind::assignment:
                this->report_error_if_assignment_is_illegal(
@@ -348,8 +350,9 @@ void linter::declare_variable(scope &scope, identifier name, variable_kind kind,
 void linter::visit_variable_assignment(identifier name) {
   QLJS_ASSERT(!this->scopes_.empty());
   scope &current_scope = this->current_scope();
-  const declared_variable *var = current_scope.declared_variables.find(name);
+  declared_variable *var = current_scope.declared_variables.find(name);
   if (var) {
+    var->is_used = true;
     this->report_error_if_assignment_is_illegal(
         var, name, /*is_assigned_before_declaration=*/false);
   } else {
@@ -394,12 +397,14 @@ void linter::visit_variable_use(identifier name) {
 void linter::visit_variable_use(identifier name, used_variable_kind use_kind) {
   QLJS_ASSERT(!this->scopes_.empty());
   scope &current_scope = this->current_scope();
-  bool variable_is_declared =
-      current_scope.declared_variables.find(name) != nullptr;
-  if (!variable_is_declared) {
+  declared_variable* var =
+      current_scope.declared_variables.find(name);
+  if (var) {
+    var->is_used = true;
+  } else {
     current_scope.variables_used.emplace_back(name, use_kind);
     if (name.normalized_name() == u8"eval"sv) {
-      current_scope.used_eval = true;
+      current_scope.used_eval_in_this_scope = true;
     }
   }
 }
@@ -516,20 +521,27 @@ void linter::propagate_variable_uses_to_parent_scope(
 
   if constexpr (!parent_scope_is_global_scope) {
     if (!allow_variable_use_before_declaration) {
-      parent_scope.used_eval =
-          parent_scope.used_eval || current_scope.used_eval;
+      parent_scope.used_eval_in_this_scope =
+          parent_scope.used_eval_in_this_scope || current_scope.used_eval_in_this_scope;
     }
+      parent_scope.used_eval_in_descendant_scope =
+          parent_scope.used_eval_in_descendant_scope ||
+          current_scope.used_eval_in_this_scope ||
+          current_scope.used_eval_in_descendant_scope;
   }
 
-  if (!current_scope.used_eval) {
+  if (!current_scope.used_eval_in_this_scope) {
     for (const used_variable &used_var : current_scope.variables_used) {
       QLJS_ASSERT(!current_scope.declared_variables.find(used_var.name));
-      const auto var = parent_scope.declared_variables.find(used_var.name);
+      auto var = parent_scope.declared_variables.find(used_var.name);
       if (var) {
         // This variable was declared in the parent scope. Don't propagate.
         if (used_var.kind == used_variable_kind::assignment) {
           this->report_error_if_assignment_is_illegal(
               var, used_var.name, /*is_assigned_before_declaration=*/false);
+        }
+        if constexpr (!parent_scope_is_global_scope) {
+          var->is_used = true;
         }
       } else if (consume_arguments &&
                  used_var.name.normalized_name() == u8"arguments") {
@@ -577,6 +589,29 @@ void linter::propagate_variable_declarations_to_parent_scope() {
           /*kind=*/var.kind,
           /*declared_scope=*/
           declared_variable_scope::declared_in_descendant_scope);
+    }
+    if ((
+          var.kind == variable_kind::_const
+          || var.kind == variable_kind::_let
+        )
+        && !var.is_used &&
+        !(current_scope.used_eval_in_this_scope || current_scope.used_eval_in_descendant_scope)) {
+      // @@@ NOTE[abc]: should we check multiple parent scopes, not just the immediate
+      // parent?
+      const declared_variable *already_declared_variable =
+          parent_scope.declared_variables.find(var.declaration);
+      if (already_declared_variable &&
+          (already_declared_variable->kind != variable_kind::_parameter
+           && already_declared_variable->kind != variable_kind::_class
+           && already_declared_variable->kind != variable_kind::_function
+           && already_declared_variable->kind != variable_kind::_import
+           && already_declared_variable->kind != variable_kind::_catch
+          )) {
+        this->error_reporter_->report(error_unused_variable_shadows{
+            .shadowing_declaration = var.declaration,
+            .shadowed_declaration = already_declared_variable->declaration,
+            });
+      }
     }
   }
 }
@@ -754,7 +789,7 @@ void linter::report_error_if_variable_declaration_conflicts(
   }
 }
 
-const linter::declared_variable *
+linter::declared_variable *
 linter::declared_variable_set::add_variable_declaration(
     identifier name, variable_kind kind,
     declared_variable_scope declared_scope) {
@@ -762,14 +797,20 @@ linter::declared_variable_set::add_variable_declaration(
       .declaration = name,
       .kind = kind,
       .declaration_scope = declared_scope,
+      .is_used = false,
   });
   return &this->variables_.back();
 }
 
 const linter::declared_variable *linter::declared_variable_set::find(
     identifier name) const noexcept {
+  return const_cast<declared_variable_set*>(this)->find(name);
+}
+
+linter::declared_variable *linter::declared_variable_set::find(
+    identifier name) noexcept {
   string8_view name_view = name.normalized_name();
-  for (const declared_variable &var : this->variables_) {
+  for (declared_variable &var : this->variables_) {
     if (var.declaration.normalized_name() == name_view) {
       return &var;
     }
@@ -796,7 +837,8 @@ void linter::scope::clear() {
   this->variables_used.clear();
   this->variables_used_in_descendant_scope.clear();
   this->function_expression_declaration.reset();
-  this->used_eval = false;
+  this->used_eval_in_this_scope = false;
+  this->used_eval_in_descendant_scope = false;
 }
 
 linter::scopes::scopes() {

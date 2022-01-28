@@ -1368,6 +1368,12 @@
       error_unopened_block_comment, "E0210",                                   \
       { source_code_span comment_close; },                                     \
       ERROR(QLJS_TRANSLATABLE("unopened block comment"), comment_close))       \
+\
+  QLJS_ERROR_TYPE(                                                             \
+      error_unused_variable_shadows, "E0196",                                   \
+      { identifier shadowing_declaration; identifier shadowed_declaration; },                                     \
+      WARNING(QLJS_TRANSLATABLE("new variable shadows existing variable"), shadowing_declaration) \
+      NOTE(QLJS_TRANSLATABLE("existing variable declared here"), shadowed_declaration))       \
                                                                                \
   QLJS_ERROR_TYPE(                                                             \
       error_no_digits_in_binary_number, "E0049",                               \
