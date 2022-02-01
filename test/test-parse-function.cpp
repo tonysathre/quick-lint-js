@@ -124,6 +124,12 @@ TEST(test_parse, parse_function_statement) {
   {
     spy_visitor v =
         parse_and_visit_statement(u8"function g(first, ...args) {}"_sv);
+    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // g
+                                      "visit_enter_function_scope",  //
+                                      "visit_variable_declaration",  // first
+                                      "visit_variable_declaration",  // args
+                                      "visit_enter_function_scope_body",  //
+                                      "visit_exit_function_scope"));
     EXPECT_THAT(v.variable_declarations,
                 ElementsAre(
                     spy_visitor::visited_variable_declaration{

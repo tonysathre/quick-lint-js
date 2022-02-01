@@ -1059,7 +1059,8 @@ void parser::parse_and_visit_function_parameters(Visitor &v) {
       expression *parameter = this->parse_expression(
           v, precedence{.commas = false, .in_operator = true});
       this->visit_binding_element(parameter, v, variable_kind::_parameter,
-                                  /*declaring_token=*/std::nullopt);
+                                  /*declaring_token=*/std::nullopt,
+                                  /*has_initializer=*/true);
       if (parameter->kind() == expression_kind::spread) {
         last_parameter_spread_span = parameter->span();
       } else {
@@ -1683,11 +1684,14 @@ bool parser::parse_and_visit_catch_or_finally_or_both(Visitor &v) {
         break;
 
       case token_type::left_curly:
-      case token_type::left_square:
-        this->parse_and_visit_binding_element(v, variable_kind::_catch,
-                                              /*declaring_token=*/std::nullopt,
-                                              /*allow_in_operator=*/false);
+      case token_type::left_square: {
+        expression *ast = this->parse_expression(
+            v, precedence{.commas = false, .in_operator = false});
+        this->visit_binding_element(ast, v, variable_kind::_catch,
+                                    /*declaring_token=*/std::nullopt,
+                                    /*has_initializer=*/true);
         break;
+      }
 
       case token_type::right_paren:
         this->error_reporter_->report(
@@ -2885,7 +2889,8 @@ void parser::parse_and_visit_let_bindings(Visitor &v, token declaring_token,
         }
 
         this->visit_binding_element(assignment_ast, v, declaration_kind,
-                                    /*declaring_token=*/declaring_token.span());
+                                    /*declaring_token=*/declaring_token.span(),
+                                    /*has_initializer=*/true);
         break;
       }
 
@@ -2899,7 +2904,8 @@ void parser::parse_and_visit_let_bindings(Visitor &v, token declaring_token,
         if (this->peek().has_leading_newline) {
           this->visit_binding_element(
               variable, v, declaration_kind,
-              /*declaring_token=*/declaring_token.span());
+              /*declaring_token=*/declaring_token.span(),
+              /*has_initializer=*/false /*@@@*/);
           this->lexer_.insert_semicolon();
           return;
         }
@@ -2910,7 +2916,8 @@ void parser::parse_and_visit_let_bindings(Visitor &v, token declaring_token,
         this->parse_and_visit_expression(
             v, precedence{.commas = false, .in_operator = allow_in_operator});
         this->visit_binding_element(variable, v, declaration_kind,
-                                    /*declaring_token=*/declaring_token.span());
+                                    /*declaring_token=*/declaring_token.span(),
+                                    /*has_initializer=*/false /*@@@*/);
         break;
       }
 
@@ -2924,8 +2931,17 @@ void parser::parse_and_visit_let_bindings(Visitor &v, token declaring_token,
                     .variable_name = variable->span()});
           }
         }
+        // @@@ but what about:
+        // let of;
+        // let x
+        // of = 42;
+        bool has_initializer = this->peek().type == token_type::kw_in ||
+                                       this->peek().type == token_type::kw_of
+                                   ? true
+                                   : false;  // @@@
         this->visit_binding_element(variable, v, declaration_kind,
-                                    /*declaring_token=*/declaring_token.span());
+                                    /*declaring_token=*/declaring_token.span(),
+                                    /*has_initializer=*/has_initializer);
         break;
       }
       break;
@@ -2937,13 +2953,19 @@ void parser::parse_and_visit_let_bindings(Visitor &v, token declaring_token,
           this->error_reporter_);
       goto variable_name;
 
+      // let {x} = xs;
+      // let [head, ...tail] = xs;
     case token_type::left_curly:
-    case token_type::left_square:
-      this->parse_and_visit_binding_element(
-          v, declaration_kind,
-          /*declaring_token=*/declaring_token.span(),
-          /*allow_in_operator=*/allow_in_operator);
+    case token_type::left_square: {
+      expression *ast = this->parse_expression(
+          v, precedence{.commas = false, .in_operator = allow_in_operator});
+      // TODO(strager): Report error if initializer is missing.
+      // @@@ what about: for (let {x} of xs) {}
+      this->visit_binding_element(ast, v, declaration_kind,
+                                  /*declaring_token=*/declaring_token.span(),
+                                  /*has_initializer=*/true);
       break;
+    }
 
       // let switch = 3;  // Invalid.
       // let if (x) {}    // Invalid.
@@ -3040,23 +3062,26 @@ void parser::parse_and_visit_let_bindings(Visitor &v, token declaring_token,
 QLJS_WARNING_POP
 
 template <QLJS_PARSE_VISITOR Visitor>
-void parser::parse_and_visit_binding_element(
-    Visitor &v, variable_kind declaration_kind,
-    std::optional<source_code_span> declaring_token, bool allow_in_operator) {
-  expression *ast = this->parse_expression(
-      v, precedence{.commas = false, .in_operator = allow_in_operator});
-  this->visit_binding_element(ast, v, declaration_kind, declaring_token);
-}
-
-template <QLJS_PARSE_VISITOR Visitor>
 void parser::visit_binding_element(
     expression *ast, Visitor &v, variable_kind declaration_kind,
-    std::optional<source_code_span> declaring_token) {
+    std::optional<source_code_span> declaring_token, bool has_initializer) {
+  auto visit_variable_declaration = [&](const identifier &ident) -> void {
+    if (has_initializer) {
+      v.visit_variable_declaration(ident, declaration_kind);
+    } else {
+      QLJS_ASSERT(declaration_kind == variable_kind::_const ||
+                  declaration_kind == variable_kind::_let ||
+                  declaration_kind == variable_kind::_var);
+      v.visit_variable_declaration_without_init(ident, declaration_kind);
+    }
+  };
+
   switch (ast->kind()) {
   case expression_kind::array:
     for (expression *item : ast->children()) {
       this->visit_binding_element(item, v, declaration_kind,
-                                  /*declaring_token=*/declaring_token);
+                                  /*declaring_token=*/declaring_token,
+                                  /*has_initializer=*/has_initializer);
     }
     break;
 
@@ -3077,7 +3102,8 @@ void parser::visit_binding_element(
   case expression_kind::assignment:
     this->visit_expression(ast->child_1(), v, variable_context::rhs);
     this->visit_binding_element(ast->child_0(), v, declaration_kind,
-                                /*declaring_token=*/declaring_token);
+                                /*declaring_token=*/declaring_token,
+                                /*has_initializer=*/has_initializer);
     break;
 
   case expression_kind::variable: {
@@ -3093,25 +3119,27 @@ void parser::visit_binding_element(
           error_cannot_declare_variable_named_let_with_let{.name =
                                                                ident.span()});
     }
-    v.visit_variable_declaration(ident, declaration_kind);
+    visit_variable_declaration(ident);
     break;
   }
   case expression_kind::object:
     for (int i = 0; i < ast->object_entry_count(); ++i) {
       expression *value = ast->object_entry(i).value;
       this->visit_binding_element(value, v, declaration_kind,
-                                  /*declaring_token=*/declaring_token);
+                                  /*declaring_token=*/declaring_token,
+                                  /*has_initializer=*/has_initializer);
     }
     break;
   case expression_kind::spread:
     this->visit_binding_element(ast->child_0(), v, declaration_kind,
-                                /*declaring_token=*/declaring_token);
+                                /*declaring_token=*/declaring_token,
+                                /*has_initializer=*/true);
     break;
 
   case expression_kind::await: {
     auto *await = expression_cast<expression::await>(ast);
     identifier ident(await->unary_operator_span());
-    v.visit_variable_declaration(ident, declaration_kind);
+    visit_variable_declaration(ident);
     this->error_reporter_->report(error_cannot_declare_await_in_async_function{
         .name = ident,
     });
@@ -3120,7 +3148,7 @@ void parser::visit_binding_element(
 
   case expression_kind::yield_none: {
     identifier ident(ast->span());
-    v.visit_variable_declaration(ident, declaration_kind);
+    visit_variable_declaration(ident);
     this->error_reporter_->report(
         error_cannot_declare_yield_in_generator_function{
             .name = ident,
@@ -3166,7 +3194,8 @@ void parser::visit_binding_element(
         .comma = static_cast<expression::trailing_comma *>(ast)->comma_span(),
     });
     this->visit_binding_element(ast->child_0(), v, declaration_kind,
-                                /*declaring_token=*/declaring_token);
+                                /*declaring_token=*/declaring_token,
+                                /*has_initializer=*/has_initializer);
     break;
 
     // function f(#bananas) {}  // Invalid.
@@ -3188,7 +3217,8 @@ void parser::visit_binding_element(
   case expression_kind::paren:
     // TODO(strager): Report an error.
     this->visit_binding_element(ast->child_0(), v, declaration_kind,
-                                /*declaring_token=*/declaring_token);
+                                /*declaring_token=*/declaring_token,
+                                /*has_initializer=*/has_initializer);
     break;
 
   case expression_kind::literal:

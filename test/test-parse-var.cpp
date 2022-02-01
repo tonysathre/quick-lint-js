@@ -31,6 +31,8 @@ namespace {
 TEST(test_parse, parse_simple_let) {
   {
     spy_visitor v = parse_and_visit_statement(u8"let x"_sv);
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init"));
     ASSERT_EQ(v.variable_declarations.size(), 1);
     EXPECT_EQ(v.variable_declarations[0].name, u8"x");
     EXPECT_EQ(v.variable_declarations[0].kind, variable_kind::_let);
@@ -38,6 +40,9 @@ TEST(test_parse, parse_simple_let) {
 
   {
     spy_visitor v = parse_and_visit_statement(u8"let a, b"_sv);
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",
+                            "visit_variable_declaration_without_init"));
     ASSERT_EQ(v.variable_declarations.size(), 2);
     EXPECT_EQ(v.variable_declarations[0].name, u8"a");
     EXPECT_EQ(v.variable_declarations[0].kind, variable_kind::_let);
@@ -80,6 +85,7 @@ TEST(test_parse, parse_simple_var) {
   padded_string code(u8"var x"_sv);
   parser p(&code, &v);
   EXPECT_TRUE(p.parse_and_visit_statement(v));
+  EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration_without_init"));
   ASSERT_EQ(v.variable_declarations.size(), 1);
   EXPECT_EQ(v.variable_declarations[0].name, u8"x");
   EXPECT_EQ(v.variable_declarations[0].kind, variable_kind::_var);
@@ -91,6 +97,7 @@ TEST(test_parse, parse_simple_const) {
   padded_string code(u8"const x = null"_sv);
   parser p(&code, &v);
   EXPECT_TRUE(p.parse_and_visit_statement(v));
+  EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration"));
   ASSERT_EQ(v.variable_declarations.size(), 1);
   EXPECT_EQ(v.variable_declarations[0].name, u8"x");
   EXPECT_EQ(v.variable_declarations[0].kind, variable_kind::_const);
@@ -102,6 +109,7 @@ TEST(test_parse, parse_const_with_no_initializers) {
   padded_string code(u8"const x;"_sv);
   parser p(&code, &v);
   EXPECT_TRUE(p.parse_and_visit_statement(v));
+  EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration_without_init"));
   ASSERT_EQ(v.variable_declarations.size(), 1);
   EXPECT_EQ(v.variable_declarations[0].name, u8"x");
   EXPECT_EQ(v.variable_declarations[0].kind, variable_kind::_const);
@@ -114,21 +122,25 @@ TEST(test_parse, parse_const_with_no_initializers) {
 TEST(test_parse, let_asi) {
   {
     spy_visitor v = parse_and_visit_module(u8"let x\ny"_sv);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_variable_use",          // y
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // y
+                            "visit_end_of_module"));
   }
 }
 
 TEST(test_parse, parse_let_with_initializers) {
   {
     spy_visitor v = parse_and_visit_statement(u8"let x = 2"_sv);
+    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration"));
     ASSERT_EQ(v.variable_declarations.size(), 1);
     EXPECT_EQ(v.variable_declarations[0].name, u8"x");
   }
 
   {
     spy_visitor v = parse_and_visit_statement(u8"let x = 2, y = 3"_sv);
+    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",
+                                      "visit_variable_declaration"));
     ASSERT_EQ(v.variable_declarations.size(), 2);
     EXPECT_EQ(v.variable_declarations[0].name, u8"x");
     EXPECT_EQ(v.variable_declarations[1].name, u8"y");
@@ -157,6 +169,7 @@ TEST(test_parse, parse_let_with_initializers) {
 TEST(test_parse, parse_let_with_object_destructuring) {
   {
     spy_visitor v = parse_and_visit_statement(u8"let {x} = 2"_sv);
+    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration"));
     ASSERT_EQ(v.variable_declarations.size(), 1);
     EXPECT_EQ(v.variable_declarations[0].name, u8"x");
   }
@@ -253,10 +266,10 @@ TEST(test_parse, parse_valid_let) {
     parser p(&code, &v);
     p.parse_and_visit_module(v);
     EXPECT_THAT(v.visits,
-                ElementsAre("visit_variable_declaration",  // x
-                            "visit_variable_declaration",  // C
-                            "visit_enter_class_scope",     //
-                            "visit_exit_class_scope",      //
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_declaration",               // C
+                            "visit_enter_class_scope",                  //
+                            "visit_exit_class_scope",                   //
                             "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, IsEmpty());
@@ -268,8 +281,8 @@ TEST(test_parse, parse_valid_let) {
     parser p(&code, &v);
     p.parse_and_visit_module(v);
     EXPECT_THAT(v.visits,
-                ElementsAre("visit_variable_declaration",  // x
-                            "visit_variable_use",          // Array
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // Array
                             "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, IsEmpty());
@@ -280,9 +293,10 @@ TEST(test_parse, parse_valid_let) {
     padded_string code(u8"let x\ntypeof Array"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_variable_typeof_use",   // Array
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_typeof_use",                // Array
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, IsEmpty());
   }
@@ -293,12 +307,12 @@ TEST(test_parse, parse_valid_let) {
     parser p(&code, &v);
     p.parse_and_visit_module(v);
     EXPECT_THAT(v.visits,
-                ElementsAre("visit_variable_declaration",  // x
-                            "visit_variable_declaration",  // C
-                            "visit_enter_class_scope",     //
-                            "visit_exit_class_scope",      //
-                            "visit_variable_use",          // C
-                            "visit_variable_assignment",   // x
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_declaration",               // C
+                            "visit_enter_class_scope",                  //
+                            "visit_exit_class_scope",                   //
+                            "visit_variable_use",                       // C
+                            "visit_variable_assignment",                // x
                             "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, IsEmpty());
@@ -429,9 +443,10 @@ TEST(test_parse, parse_invalid_let) {
     padded_string code(u8"let x, `hello${world}`;"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_variable_use",          // world
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // world
+                            "visit_end_of_module"));
     // TODO(strager): Improve the span.
     EXPECT_THAT(v.errors,
                 ElementsAre(ERROR_TYPE_OFFSETS(
@@ -468,9 +483,10 @@ TEST(test_parse, parse_invalid_let) {
     padded_string code(u8"let true, true, y\nlet x;"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_use",          // y
-                                      "visit_variable_declaration",  // x
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_use",                       // y
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_end_of_module"));
     EXPECT_THAT(v.variable_uses,
                 ElementsAre(spy_visitor::visited_variable_use{u8"y"}));
     EXPECT_THAT(v.variable_declarations,
@@ -525,11 +541,12 @@ TEST(test_parse, parse_invalid_let) {
     padded_string code(u8"let x y = z w"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_variable_use",          // z
-                                      "visit_variable_declaration",  // y
-                                      "visit_variable_declaration",  // z
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // z
+                            "visit_variable_declaration",               // y
+                            "visit_variable_declaration_without_init",  // w
+                            "visit_end_of_module"));
     EXPECT_THAT(
         v.errors,
         UnorderedElementsAre(
@@ -546,12 +563,13 @@ TEST(test_parse, parse_invalid_let) {
     padded_string code(u8"let x [y]=ys {z}=zs"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_variable_use",          // ys
-                                      "visit_variable_declaration",  // y
-                                      "visit_variable_use",          // zs
-                                      "visit_variable_declaration",  // z
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // ys
+                            "visit_variable_declaration",               // y
+                            "visit_variable_use",                       // zs
+                            "visit_variable_declaration",               // z
+                            "visit_end_of_module"));
     EXPECT_THAT(
         v.errors,
         UnorderedElementsAre(
@@ -584,10 +602,11 @@ TEST(test_parse, parse_invalid_let) {
     p.parse_and_visit_module(v);
     // TODO(strager): We should signal to the linter that duplicate-definition
     // errors should be ignored for 'x'.
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_use",          // y
-                                      "visit_variable_declaration",  // x
-                                      "visit_variable_declaration",  // z
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_use",                       // y
+                            "visit_variable_declaration",               // x
+                            "visit_variable_declaration_without_init",  // z
+                            "visit_end_of_module"));
     EXPECT_THAT(v.errors,
                 ElementsAre(ERROR_TYPE_2_OFFSETS(
                     &code, error_cannot_update_variable_during_declaration,  //
@@ -617,13 +636,14 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"async function f() {return 1;}\nlet x await f()"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",       // f
-                                      "visit_enter_function_scope",       //
-                                      "visit_enter_function_scope_body",  //
-                                      "visit_exit_function_scope",        //
-                                      "visit_variable_use",               // f
-                                      "visit_variable_declaration",       // x
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration",               // f
+                            "visit_enter_function_scope",               //
+                            "visit_enter_function_scope_body",          //
+                            "visit_exit_function_scope",                //
+                            "visit_variable_use",                       // f
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors,
                 ElementsAre(ERROR_TYPE_OFFSETS(
@@ -638,10 +658,10 @@ TEST(test_parse, parse_let_with_missing_equal) {
     parser p(&code, &v);
     p.parse_and_visit_module(v);
     EXPECT_THAT(v.visits,
-                ElementsAre("visit_enter_class_scope",     //
-                            "visit_variable_declaration",  // C
-                            "visit_exit_class_scope",      //
-                            "visit_variable_declaration",  // x
+                ElementsAre("visit_enter_class_scope",                  //
+                            "visit_variable_declaration",               // C
+                            "visit_exit_class_scope",                   //
+                            "visit_variable_declaration_without_init",  // x
                             "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
@@ -654,11 +674,12 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x function f() {}"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_enter_named_function_scope",  // f
-                                      "visit_enter_function_scope_body",   //
-                                      "visit_exit_function_scope",         //
-                                      "visit_variable_declaration",        // x
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_enter_named_function_scope",         // f
+                            "visit_enter_function_scope_body",          //
+                            "visit_exit_function_scope",                //
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -670,8 +691,9 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x null"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -683,9 +705,10 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x new Array()"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_use",          // Array
-                                      "visit_variable_declaration",  // x
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_use",                       // Array
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -697,8 +720,9 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x this"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -710,9 +734,10 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x typeof Array"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_typeof_use",   // Array
-                                      "visit_variable_declaration",  // x
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_typeof_use",                // Array
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -725,15 +750,16 @@ TEST(test_parse, parse_let_with_missing_equal) {
         u8"async function f() {return 1;}\nlet x await f(), y = x"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",       // f
-                                      "visit_enter_function_scope",       //
-                                      "visit_enter_function_scope_body",  //
-                                      "visit_exit_function_scope",        //
-                                      "visit_variable_use",               // f
-                                      "visit_variable_declaration",       // x
-                                      "visit_variable_use",               // x
-                                      "visit_variable_declaration",       // y
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration",               // f
+                            "visit_enter_function_scope",               //
+                            "visit_enter_function_scope_body",          //
+                            "visit_exit_function_scope",                //
+                            "visit_variable_use",                       // f
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // x
+                            "visit_variable_declaration",               // y
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors,
                 ElementsAre(ERROR_TYPE_OFFSETS(
@@ -747,13 +773,14 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x class C{}, y = x"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_enter_class_scope",     //
-                                      "visit_variable_declaration",  // C
-                                      "visit_exit_class_scope",      //
-                                      "visit_variable_declaration",  // x
-                                      "visit_variable_use",          // x
-                                      "visit_variable_declaration",  // y
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_enter_class_scope",                  //
+                            "visit_variable_declaration",               // C
+                            "visit_exit_class_scope",                   //
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // x
+                            "visit_variable_declaration",               // y
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -765,13 +792,14 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x function f() {}, y = x"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_enter_named_function_scope",  // f
-                                      "visit_enter_function_scope_body",   //
-                                      "visit_exit_function_scope",         //
-                                      "visit_variable_declaration",        // x
-                                      "visit_variable_use",                // x
-                                      "visit_variable_declaration",        // y
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_enter_named_function_scope",         // f
+                            "visit_enter_function_scope_body",          //
+                            "visit_exit_function_scope",                //
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // x
+                            "visit_variable_declaration",               // y
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -783,10 +811,11 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x null, y = x"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_variable_use",          // x
-                                      "visit_variable_declaration",  // y
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // x
+                            "visit_variable_declaration",               // y
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -798,11 +827,12 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x new Array(), y = x;"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_use",          // Array
-                                      "visit_variable_declaration",  // x
-                                      "visit_variable_use",          // x
-                                      "visit_variable_declaration",  // y
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_use",                       // Array
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // x
+                            "visit_variable_declaration",               // y
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -814,10 +844,11 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x this, y = x"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration",  // x
-                                      "visit_variable_use",          // x
-                                      "visit_variable_declaration",  // y
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // x
+                            "visit_variable_declaration",               // y
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //
@@ -829,11 +860,12 @@ TEST(test_parse, parse_let_with_missing_equal) {
     padded_string code(u8"let x typeof Array, y = x;"_sv);
     parser p(&code, &v);
     p.parse_and_visit_module(v);
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_typeof_use",   // Array
-                                      "visit_variable_declaration",  // x
-                                      "visit_variable_use",          // x
-                                      "visit_variable_declaration",  // y
-                                      "visit_end_of_module"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_typeof_use",                // Array
+                            "visit_variable_declaration_without_init",  // x
+                            "visit_variable_use",                       // x
+                            "visit_variable_declaration",               // y
+                            "visit_end_of_module"));
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_OFFSETS(
                               &code, error_missing_equal_after_variable,  //

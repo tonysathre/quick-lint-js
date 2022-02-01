@@ -342,11 +342,12 @@ TEST(test_parse, for_loop_with_missing_component) {
             error_missing_for_loop_rhs_or_components_after_declaration,  //
             header, strlen(u8"for "), u8"(let myVar)",                   //
             for_token, 0, u8"for")));
-    EXPECT_THAT(v.visits, ElementsAre("visit_enter_for_scope",       //
-                                      "visit_variable_declaration",  // myVar
-                                      "visit_enter_block_scope",     //
-                                      "visit_exit_block_scope",      //
-                                      "visit_exit_for_scope"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_enter_for_scope",                    //
+                            "visit_variable_declaration_without_init",  // myVar
+                            "visit_enter_block_scope",                  //
+                            "visit_exit_block_scope",                   //
+                            "visit_exit_for_scope"));
   }
 
   {

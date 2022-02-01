@@ -27,6 +27,15 @@ namespace {
 TEST(test_parse, export_variable) {
   {
     spy_visitor v = parse_and_visit_statement(u8"export let x;"_sv);
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init"));
+    EXPECT_THAT(v.variable_declarations,
+                ElementsAre(spy_visitor::visited_variable_declaration{
+                    u8"x", variable_kind::_let}));
+  }
+
+  {
+    spy_visitor v = parse_and_visit_statement(u8"export let x = 42;"_sv);
     EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration"));
     EXPECT_THAT(v.variable_declarations,
                 ElementsAre(spy_visitor::visited_variable_declaration{
@@ -35,6 +44,15 @@ TEST(test_parse, export_variable) {
 
   {
     spy_visitor v = parse_and_visit_statement(u8"export var x;"_sv);
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init"));
+    EXPECT_THAT(v.variable_declarations,
+                ElementsAre(spy_visitor::visited_variable_declaration{
+                    u8"x", variable_kind::_var}));
+  }
+
+  {
+    spy_visitor v = parse_and_visit_statement(u8"export var x = 42;"_sv);
     EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration"));
     EXPECT_THAT(v.variable_declarations,
                 ElementsAre(spy_visitor::visited_variable_declaration{

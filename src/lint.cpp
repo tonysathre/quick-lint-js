@@ -253,6 +253,15 @@ void linter::visit_variable_declaration(identifier name, variable_kind kind) {
       /*declared_scope=*/declared_variable_scope::declared_in_current_scope);
 }
 
+void linter::visit_variable_declaration_without_init(identifier name,
+                                                     variable_kind kind) {
+  this->declare_variable(
+      /*scope=*/this->current_scope(),
+      /*name=*/name,
+      /*kind=*/kind,
+      /*declared_scope=*/declared_variable_scope::declared_in_current_scope);
+}
+
 void linter::declare_variable(scope &scope, identifier name, variable_kind kind,
                               declared_variable_scope declared_scope) {
   bool is_function_or_var =

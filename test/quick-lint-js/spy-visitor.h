@@ -144,6 +144,13 @@ struct spy_visitor : public error_collector {
     this->visits.emplace_back("visit_variable_declaration");
   }
 
+  void visit_variable_declaration_without_init(identifier name,
+                                               variable_kind kind) {
+    this->variable_declarations.emplace_back(
+        visited_variable_declaration{string8(name.normalized_name()), kind});
+    this->visits.emplace_back("visit_variable_declaration_without_init");
+  }
+
   struct visited_variable_declaration {
     string8 name;
     variable_kind kind;

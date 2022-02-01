@@ -98,6 +98,9 @@ class buffering_visitor {
       case visit_kind::variable_declaration:
         target.visit_variable_declaration(v.name, v.var_kind);
         break;
+      case visit_kind::variable_declaration_without_init:
+        target.visit_variable_declaration_without_init(v.name, v.var_kind);
+        break;
       }
     }
   }
@@ -175,6 +178,12 @@ class buffering_visitor {
     this->visits_.emplace_back(visit_kind::variable_declaration, name, kind);
   }
 
+  void visit_variable_declaration_without_init(identifier name,
+                                               variable_kind kind) {
+    this->visits_.emplace_back(visit_kind::variable_declaration_without_init,
+                               name, kind);
+  }
+
   void visit_variable_delete_use(identifier name,
                                  source_code_span delete_keyword) {
     this->visits_.emplace_back(visit_kind::variable_delete_use, name,
@@ -217,6 +226,7 @@ class buffering_visitor {
     variable_typeof_use,
     variable_use,
     variable_declaration,
+    variable_declaration_without_init,
   };
 
   struct visit {

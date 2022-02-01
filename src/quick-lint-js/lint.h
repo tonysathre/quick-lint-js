@@ -82,6 +82,8 @@ class linter {
   void visit_keyword_variable_use(identifier name);
   void visit_property_declaration(std::optional<identifier>);
   void visit_variable_declaration(identifier name, variable_kind kind);
+  void visit_variable_declaration_without_init(identifier name,
+                                               variable_kind kind);
   void visit_variable_assignment(identifier name);
   void visit_variable_delete_use(identifier name,
                                  source_code_span delete_keyword);

@@ -493,7 +493,8 @@ TEST(
     EXPECT_TRUE(p.parse_and_visit_statement(v));
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE(
                               error_keywords_cannot_contain_escape_sequences)));
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init"));
     EXPECT_THAT(v.variable_declarations,
                 ElementsAre(spy_visitor::visited_variable_declaration{
                     u8"if", variable_kind::_let}));
@@ -506,7 +507,8 @@ TEST(
     EXPECT_TRUE(p.parse_and_visit_statement(v));
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE(
                               error_keywords_cannot_contain_escape_sequences)));
-    EXPECT_THAT(v.visits, ElementsAre("visit_variable_declaration"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_variable_declaration_without_init"));
     EXPECT_THAT(v.variable_declarations,
                 ElementsAre(spy_visitor::visited_variable_declaration{
                     u8"if", variable_kind::_var}));

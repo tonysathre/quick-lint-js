@@ -351,7 +351,14 @@ class debug_visitor {
   }
 
   void visit_variable_declaration(identifier name, variable_kind) {
-    this->output_->append_copy(u8"variable declaration: "sv);
+    this->output_->append_copy(u8"variable declaration with init: "sv);
+    this->output_->append_copy(name.normalized_name());
+    this->output_->append_copy(u8'\n');
+    this->output_->flush();
+  }
+
+  void visit_variable_declaration_without_init(identifier name, variable_kind) {
+    this->output_->append_copy(u8"variable declaration without init: "sv);
     this->output_->append_copy(name.normalized_name());
     this->output_->append_copy(u8'\n');
     this->output_->flush();
@@ -479,6 +486,12 @@ class multi_visitor {
   void visit_variable_declaration(identifier name, variable_kind kind) {
     this->visitor_1_->visit_variable_declaration(name, kind);
     this->visitor_2_->visit_variable_declaration(name, kind);
+  }
+
+  void visit_variable_declaration_without_init(identifier name,
+                                               variable_kind kind) {
+    this->visitor_1_->visit_variable_declaration_without_init(name, kind);
+    this->visitor_2_->visit_variable_declaration_without_init(name, kind);
   }
 
   void visit_variable_delete_use(identifier name,

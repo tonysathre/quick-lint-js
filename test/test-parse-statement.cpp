@@ -893,11 +893,12 @@ TEST(test_parse, switch_statement) {
   {
     spy_visitor v = parse_and_visit_statement(
         u8"switch (true) { case true: x; let y; z; }");
-    EXPECT_THAT(v.visits, ElementsAre("visit_enter_block_scope",     //
-                                      "visit_variable_use",          // x
-                                      "visit_variable_declaration",  // y
-                                      "visit_variable_use",          // z
-                                      "visit_exit_block_scope"));
+    EXPECT_THAT(v.visits,
+                ElementsAre("visit_enter_block_scope",                  //
+                            "visit_variable_use",                       // x
+                            "visit_variable_declaration_without_init",  // y
+                            "visit_variable_use",                       // z
+                            "visit_exit_block_scope"));
   }
 }
 
