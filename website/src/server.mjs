@@ -35,7 +35,7 @@ export function makeServer({
         response.end();
         return;
 
-      case "build-ejs":
+      case "build-ejs": {
         let out = null;
         try {
           out = await router.renderEJSFile(
@@ -50,6 +50,39 @@ export function makeServer({
         response.writeHeader(200, { "content-type": "text/html" });
         response.end(out);
         return;
+      }
+
+      case "routed": {
+        let routerScriptPath = path.join(
+          router.wwwRootPath,
+          classifiedDirectory.routerScript
+        );
+        let { routes } = await import(routerScriptPath);
+        if (!Object.prototype.hasOwnProperty.call(routes, request.path)) {
+          response.writeHeader(404);
+          response.end(`${request.path} is not routed by ${routerScriptPath}`);
+          break;
+        }
+        let routeDestination = routes[request.path];
+        let out = null;
+        try {
+          out = await router.renderEJSFile(
+            path.join(
+              router.wwwRootPath,
+              classifiedDirectory.routerDirectory,
+              routeDestination
+            ),
+            { currentURI: request.path }
+          );
+        } catch (error) {
+          response.writeHeader(500, { "content-type": "text/plain" });
+          response.end(error.stack);
+          return;
+        }
+        response.writeHeader(200, { "content-type": "text/html" });
+        response.end(out);
+        return;
+      }
 
       case "copy":
         let html = await fs.promises.readFile(

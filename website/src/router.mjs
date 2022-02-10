@@ -32,13 +32,21 @@ export class Router {
       return { type: "does-not-exist" };
     }
 
+    let routerDirectoryRelativePath = path.dirname(directoryPath);
+    let routerScriptRelativePath = path.join(
+      routerDirectoryRelativePath,
+      "index.mjs"
+    );
     let haveIndexEJSHTML = await isFileReadableAsync(
       path.join(this._wwwRootPath, directoryPath, "index.ejs.html")
+    );
+    let haveParentIndexMJS = await isFileReadableAsync(
+      path.join(this._wwwRootPath, routerScriptRelativePath)
     );
     let haveIndexHTML = await isFileReadableAsync(
       path.join(this._wwwRootPath, directoryPath, "index.html")
     );
-    if (haveIndexEJSHTML && haveIndexHTML) {
+    if (haveIndexEJSHTML + haveIndexHTML + haveParentIndexMJS > 1) {
       return { type: "ambiguous" };
     } else if (haveIndexHTML) {
       return {
@@ -49,6 +57,12 @@ export class Router {
       return {
         type: "build-ejs",
         path: path.join(directoryPath, "index.ejs.html"),
+      };
+    } else if (haveParentIndexMJS) {
+      return {
+        type: "routed",
+        routerScript: routerScriptRelativePath,
+        routerDirectory: routerDirectoryRelativePath,
       };
     } else {
       return { type: "does-not-exist" };
