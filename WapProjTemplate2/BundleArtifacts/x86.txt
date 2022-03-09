@@ -1,0 +1,2 @@
+MainPackage=C:\Users\strager\Documents\Projects\quick-lint-js\WapProjTemplate2\bin\x86\Debug\WapProjTemplate2_1.0.2.0_x86_Debug.appx
+SymbolPackage=C:\Users\strager\Documents\Projects\quick-lint-js\WapProjTemplate2\obj\x86\Debug\Symbols\WapProjTemplate2_1.0.2.0_x86_Debug.appxsym

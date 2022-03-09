@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<Bundle SchemaVersion="5.0" IgnorableNamespaces="b4 b5" xmlns="http://schemas.microsoft.com/appx/2013/bundle" xmlns:b4="http://schemas.microsoft.com/appx/2018/bundle" xmlns:b5="http://schemas.microsoft.com/appx/2019/bundle">
+	<Identity Name="fa6b940b-8f96-4b46-8e21-703a63133e06" Publisher="CN=strager testing" Version="1.0.2.0"/>
+	<Packages>
+		<Package Type="application" Version="1.0.2.0" Architecture="x86" FileName="WapProjTemplate2_1.0.2.0_x86_Debug.appx" Offset="694010" Size="693845">
+			<Resources>
+				<Resource Language="EN-US"/>
+				<Resource Scale="200"/>
+			</Resources>
+			<b4:Dependencies>
+				<b4:TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.14393.0" MaxVersionTested="10.0.14393.0"/>
+				<b4:TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.14393.0" MaxVersionTested="10.0.14393.0"/>
+			</b4:Dependencies>
+		</Package>
+		<Package Type="application" Version="1.0.2.0" Architecture="x64" FileName="WapProjTemplate2_1.0.2.0_x64_Debug.appx" Offset="69" Size="693848">
+			<Resources>
+				<Resource Language="EN-US"/>
+				<Resource Scale="200"/>
+			</Resources>
+			<b4:Dependencies>
+				<b4:TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.14393.0" MaxVersionTested="10.0.14393.0"/>
+				<b4:TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.14393.0" MaxVersionTested="10.0.14393.0"/>
+			</b4:Dependencies>
+		</Package>
+	</Packages>
+</Bundle>
