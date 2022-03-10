@@ -11,7 +11,7 @@
             "url": "https://c.quick-lint-js.com/releases/2.2.0/manual/windows-x86.zip"
         }
     },
-    "bin": ["bin/quick-lint-js.exe"],
+    "bin": "bin/quick-lint-js.exe",
     "checkver": {
         "url": "https://c.quick-lint-js.com/releases/latest/scoop/quick-lint-js.json",
         "jsonpath": "$.version"
