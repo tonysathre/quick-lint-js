@@ -25,6 +25,10 @@ package manager.
    (https://c.quick-lint-js.com/releases/VERSION/scoop/quick-lint-js.json
    remains unchanged.)
 
+
+1. download .jsons; download .zips; hash; upload .jsons
+2. ls .jsons; hash; save .jsons
+
 @@@ ideas
 
 ***
