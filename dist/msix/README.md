@@ -24,5 +24,3 @@ example:
   as a 300x300-pixel PNG.
 * manifest.txt: Template manifest file for `makeappx`.
   Variables are substituted by `build-unsigned-msix.go`.
-
-  @@@ pngcrush
