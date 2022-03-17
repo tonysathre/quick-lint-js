@@ -7,6 +7,12 @@ copyright file then run the following command on Windows:
 
     $ go run .\dist\msix\build-unsigned-msix.go -EXE .\path\to\quick-lint-js.exe -License .\path\to\copyright.txt -Out .\quick-lint-js.msix
 
+After creating an MSIX, in order to install it, you must
+sign the MSIX using `signtool` or `Relic`. `signtool`
+example:
+
+    $ signtool sign /fd SHA256 /a /f .\path\to\privatekey.pfx /p PRIVATEKEYPASSWORD .\quick-lint-js.msix
+
 ## Files
 
 * AppxManifest.xml
