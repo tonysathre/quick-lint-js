@@ -2,13 +2,21 @@
 
 This directory contains files to build a Windows MSIX package for quick-lint-js.
 
-@@@ how to
+To build an MSIX file, obtain `quick-lint-js.exe` and a
+copyright file then run the following command on Windows:
 
+    $ go run .\dist\msix\build-unsigned-msix.go -EXE .\path\to\quick-lint-js.exe -License .\path\to\copyright.txt -Out .\quick-lint-js.msix
+
+## Files
+
+* AppxManifest.xml
 * images/Square150x150Logo.png: dusty-right.svg padded and
   rasterized as a 300x300-pixel PNG.
 * images/Square44x44Logo.png: dusty-favicon.svg rasterized
   as a 88x88-pixel PNG.
 * images/StoreLogo.png: dusty-left.svg padded and rasterized
   as a 300x300-pixel PNG.
+* manifest.txt: Template manifest file for `makeappx`.
+  Variables are substituted by `build-unsigned-msix.go`.
 
   @@@ pngcrush
