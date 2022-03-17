@@ -35,78 +35,81 @@ func main() {
 }
 
 func Main() error {
-    var err error
+	var err error
 
-        OutPath, err = filepath.Abs(OutPath)
-        if err != nil { return err }
+	OutPath, err = filepath.Abs(OutPath)
+	if err != nil {
+		return err
+	}
 
 	tempDir, err := ioutil.TempDir("", "quick-lint-js-build-unsigned-msix")
 	if err != nil {
 		return err
 	}
-        defer os.RemoveAll(tempDir)
+	defer os.RemoveAll(tempDir)
 
-    _, scriptPath, _, ok := runtime.Caller(0)
-    if !ok {
-        panic("could not determine path of .go file")
-    }
-    msixSourcePath := filepath.Dir(scriptPath)
+	_, scriptPath, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("could not determine path of .go file")
+	}
+	msixSourcePath := filepath.Dir(scriptPath)
 
-    mappingFilePath := filepath.Join(tempDir, "mapping.txt")
-    if err := MakeMapping(msixSourcePath, mappingFilePath); err != nil {
-        return err
-    }
+	mappingFilePath := filepath.Join(tempDir, "mapping.txt")
+	if err := MakeMapping(msixSourcePath, mappingFilePath); err != nil {
+		return err
+	}
 
-    process := exec.Command(
-        "makeappx", 
-        "pack",
-        "/verbose",
-        "/overwrite",
-        "/hashAlgorithm", "SHA256",
-        "/f", mappingFilePath,
-        "/p", OutPath,
-    )
-    process.Stdout = os.Stdout
-    process.Stderr = os.Stderr
-    process.Dir = msixSourcePath
-    if err := process.Start(); err != nil {
-        return err
-    }
-    if err := process.Wait(); err != nil {
-        return err
-    }
+	process := exec.Command(
+		"makeappx",
+		"pack",
+		"/verbose",
+		"/overwrite",
+		"/hashAlgorithm", "SHA256",
+		"/f", mappingFilePath,
+		"/p", OutPath,
+	)
+	process.Stdout = os.Stdout
+	process.Stderr = os.Stderr
+	process.Dir = msixSourcePath
+	if err := process.Start(); err != nil {
+		return err
+	}
+	if err := process.Wait(); err != nil {
+		return err
+	}
 
-    return nil
+	return nil
 }
 
 func MakeMapping(msixSourcePath string, mappingFilePath string) error {
-    var err error
+	var err error
 
-    var templateVariables struct {
-        EXE string
-    }
-    templateVariables.EXE, err = filepath.Abs(EXEPath)
-    if err != nil { return err }
+	var templateVariables struct {
+		EXE string
+	}
+	templateVariables.EXE, err = filepath.Abs(EXEPath)
+	if err != nil {
+		return err
+	}
 
-    mappingTemplatePath := filepath.Join(msixSourcePath, "mapping.txt")
-    mappingTemplateSource, err := ioutil.ReadFile(mappingTemplatePath)
-    tmpl, err := template.New(mappingTemplatePath).Parse(string(mappingTemplateSource))
-    if err != nil {
-        return err
-    }
+	mappingTemplatePath := filepath.Join(msixSourcePath, "mapping.txt")
+	mappingTemplateSource, err := ioutil.ReadFile(mappingTemplatePath)
+	tmpl, err := template.New(mappingTemplatePath).Parse(string(mappingTemplateSource))
+	if err != nil {
+		return err
+	}
 
-    mappingFile, err := os.Create(mappingFilePath)
-    if err != nil {
-        return err
-    }
-    defer mappingFile.Close()
-    if err := tmpl.Execute(mappingFile, templateVariables); err != nil {
-        return err
-    }
+	mappingFile, err := os.Create(mappingFilePath)
+	if err != nil {
+		return err
+	}
+	defer mappingFile.Close()
+	if err := tmpl.Execute(mappingFile, templateVariables); err != nil {
+		return err
+	}
 
-    return nil
+	return nil
 }
-
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar
