@@ -3,15 +3,15 @@
 
 package main
 
-import "io/ioutil"
-import "text/template"
-import "os/exec"
 import "flag"
 import "fmt"
+import "io/ioutil"
 import "log"
 import "os"
+import "os/exec"
 import "path/filepath"
 import "runtime"
+import "text/template"
 
 var EXEPath string
 var OutPath string
