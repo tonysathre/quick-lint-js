@@ -5,3 +5,4 @@
 "images/StoreLogo.png" "images/StoreLogo.png"
 
 "{{ .EXE }}" "quick-lint-js.exe"
+"{{ .License }}" "LICENSE.txt"

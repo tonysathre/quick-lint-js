@@ -14,14 +14,20 @@ import "runtime"
 import "text/template"
 
 var EXEPath string
+var LicensePath string
 var OutPath string
 
 func main() {
 	flag.StringVar(&EXEPath, "EXE", "", "")
+	flag.StringVar(&LicensePath, "License", "", "")
 	flag.StringVar(&OutPath, "Out", "", "")
 	flag.Parse()
 	if EXEPath == "" {
 		fmt.Fprintf(os.Stderr, "error: missing -EXE\n")
+		os.Exit(2)
+	}
+	if LicensePath == "" {
+		fmt.Fprintf(os.Stderr, "error: missing -License\n")
 		os.Exit(2)
 	}
 	if OutPath == "" {
@@ -85,9 +91,14 @@ func MakeMapping(msixSourcePath string, mappingFilePath string) error {
 	var err error
 
 	var templateVariables struct {
-		EXE string
+		EXE     string
+		License string
 	}
 	templateVariables.EXE, err = filepath.Abs(EXEPath)
+	if err != nil {
+		return err
+	}
+	templateVariables.License, err = filepath.Abs(LicensePath)
 	if err != nil {
 		return err
 	}
