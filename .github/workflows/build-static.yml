@@ -363,11 +363,11 @@ jobs:
         run: Expand-Archive -LiteralPath windows.zip -DestinationPath quick-lint-js
         shell: powershell
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-
       - name: create MSIX
-        run: go run ./dist/msix/build-unsigned-msix.go -EXE ./quick-lint-js/bin/quick-lint-js.exe -License ./quick-lint-js/share/doc/quick-lint-js/copyright -Out quick-lint-js.msix
+        run: |
+          PATH="${PATH}:/c/Program Files (x86)/Windows Kits/10/bin/x64"
+          go run ./dist/msix/build-unsigned-msix.go -EXE ./quick-lint-js/bin/quick-lint-js.exe -License ./quick-lint-js/share/doc/quick-lint-js/copyright -Out quick-lint-js.msix
+        shell: bash
 
       - name: upload MSIX to workflow
         uses: actions/upload-artifact@v2
