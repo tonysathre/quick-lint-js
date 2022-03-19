@@ -45,12 +45,12 @@ func main() {
         defer zipEntryFile.Close()
 
         // @@@
-        zipEntry.FileHeader.Extra = nil
-        zipEntry.CompressedSize = uint32(zipEntry.CompressedSize64)
-        zipEntry.UncompressedSize = uint32(zipEntry.UncompressedSize64)
+        //zipEntry.FileHeader.Extra = nil
+        //zipEntry.CompressedSize = uint32(zipEntry.CompressedSize64)
+        //zipEntry.UncompressedSize = uint32(zipEntry.UncompressedSize64)
         //fmt.Printf("@@@ %#v\n", zipEntry.FileHeader)
 
-        if false {
+        if true {
             rawZIPEntryFile, err := zipEntry.OpenRaw()
             if err != nil {
                 log.Fatal(err)
@@ -153,47 +153,19 @@ const zipVersion uint16 = 0x002d
 const sizeInDataDescriptor uint16 = 0x0008
 
 func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
-    w.finishFileIfNeeded()
-
-    w.files = append(w.files, appxFileInfo{
-        flags: sizeInDataDescriptor,
-        compressionMethod: header.Method,
-        lastModFileTime: header.ModifiedTime, // @@@
-        lastModFileDate: header.ModifiedDate, // @@@
-        crc32: 0,
-        compressedSize: 0,
-        uncompressedSize: 0,
-        fileName: []byte(header.Name),
-        localHeaderOffset: w.tell(),
-    })
-    w.writeLocalFileHeader(w.files[len(w.files) - 1])
-
+    w.addNewFile(header)
     result := appxRawFileWriter{
         w: w,
         dataOffset: w.tell(),
-        crc32: header.CRC32, // @@@ could we compute instead?
+        crc32: header.CRC32,
         uncompressedSize: int64(header.UncompressedSize64),
     }
     w.currentFile = &result
     return result, w.err
 }
 
-// @@@ dedupe
 func (w *APPXWriter) CreateHeader(header *zip.FileHeader) (io.Writer, error) {
-    w.finishFileIfNeeded()
-
-    w.files = append(w.files, appxFileInfo{
-        flags: sizeInDataDescriptor,
-        compressionMethod: header.Method,
-        lastModFileTime: header.ModifiedTime, // @@@
-        lastModFileDate: header.ModifiedDate, // @@@
-        crc32: 0,
-        compressedSize: 0,
-        uncompressedSize: 0,
-        fileName: []byte(header.Name),
-        localHeaderOffset: w.tell(),
-    })
-    w.writeLocalFileHeader(w.files[len(w.files) - 1])
+    w.addNewFile(header)
 
     hasher := crc32.NewIEEE()
     var result appxWriterInProgressFile
@@ -223,6 +195,23 @@ func (w *APPXWriter) CreateHeader(header *zip.FileHeader) (io.Writer, error) {
     }
     w.currentFile = result
     return result, w.err
+}
+
+func (w *APPXWriter) addNewFile(header *zip.FileHeader) {
+    w.finishFileIfNeeded()
+
+    w.files = append(w.files, appxFileInfo{
+        flags: sizeInDataDescriptor,
+        compressionMethod: header.Method,
+        lastModFileTime: header.ModifiedTime, // @@@
+        lastModFileDate: header.ModifiedDate, // @@@
+        crc32: 0,
+        compressedSize: 0,
+        uncompressedSize: 0,
+        fileName: []byte(header.Name),
+        localHeaderOffset: w.tell(),
+    })
+    w.writeLocalFileHeader(w.files[len(w.files) - 1])
 }
 
 func (w *APPXWriter) writeLocalFileHeader(file appxFileInfo) {
