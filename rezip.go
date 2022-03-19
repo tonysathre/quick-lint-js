@@ -2,6 +2,7 @@ package main
 
 import "archive/zip"
 import "bytes"
+import "compress/flate"
 import "encoding/binary"
 import "flag"
 import "fmt"
@@ -67,7 +68,7 @@ func main() {
             if err != nil {
                 log.Fatal(err)
             }
-            zipEntry.FileHeader.Method = zip.Store // @@@
+            //zipEntry.FileHeader.Method = zip.Store // @@@
             destinationZipEntryFile, err := destinationZipFile.CreateHeader(&zipEntry.FileHeader)
             if err != nil {
                 log.Fatal(err)
@@ -194,18 +195,28 @@ func (w *APPXWriter) CreateHeader(header *zip.FileHeader) (io.Writer, error) {
     })
     w.writeLocalFileHeader(w.files[len(w.files) - 1])
 
+    hasher := crc32.NewIEEE()
     var result appxWriterInProgressFile
     switch header.Method {
     case zip.Store:
-        hasher := crc32.NewIEEE()
         result = appxStoringFileWriter{
             w: w,
             dataOffset: w.tell(),
             crc32: &hasher,
         }
     case zip.Deflate:
+        compressor, err := flate.NewWriter(w.file, flate.BestCompression)
+        if err != nil {
+            return result, err
+        }
         result = appxDeflatingFileWriter{
             w: w,
+            compressor: compressor,
+            dataOffset: w.tell(),
+            state: &appxDeflatingFileWriterState{
+                uncompressedSize: 0,
+                crc32: hasher,
+            },
         }
     default:
         return nil, fmt.Errorf("unsupported compression method %#x", header.Method)
@@ -370,13 +381,32 @@ func (w appxStoringFileWriter) Write(data []byte) (int, error) {
 
 type appxDeflatingFileWriter struct {
     w *APPXWriter
+    dataOffset int64
+    compressor *flate.Writer
+    state *appxDeflatingFileWriterState
+}
+
+type appxDeflatingFileWriterState struct {
+    uncompressedSize int64
+    crc32 hash.Hash32
 }
 
 func (f appxDeflatingFileWriter) finalize(outFile *appxFileInfo) {
-    // @@@
+    f.compressor.Close()
+    outFile.compressedSize = f.w.tell() - f.dataOffset
+    outFile.uncompressedSize = f.state.uncompressedSize
+    outFile.crc32 = f.state.crc32.Sum32()
 }
 
 func (w appxDeflatingFileWriter) Write(data []byte) (int, error) {
-    w.w.bytes(data)
-    return len(data), w.w.err
+    if w.w.err != nil {
+        return 0, w.w.err
+    }
+    written, err := w.compressor.Write(data)
+    if err != nil {
+        w.w.err = err
+    }
+    w.state.uncompressedSize += int64(written)
+    w.state.crc32.Write(data)
+    return written, w.w.err
 }
