@@ -167,7 +167,7 @@ func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
     })
     w.writeLocalFileHeader(w.files[len(w.files) - 1])
 
-    result := APPXRawFileWriter{
+    result := appxRawFileWriter{
         w: w,
         dataOffset: w.tell(),
         crc32: header.CRC32, // @@@ could we compute instead?
@@ -198,13 +198,13 @@ func (w *APPXWriter) CreateHeader(header *zip.FileHeader) (io.Writer, error) {
     switch header.Method {
     case zip.Store:
         hasher := crc32.NewIEEE()
-        result = APPXStoringFileWriter{
+        result = appxStoringFileWriter{
             w: w,
             dataOffset: w.tell(),
             crc32: &hasher,
         }
     case zip.Deflate:
-        result = APPXDeflatingFileWriter{
+        result = appxDeflatingFileWriter{
             w: w,
         }
     default:
@@ -331,55 +331,52 @@ func (w *APPXWriter) bytes(data []byte) {
     _, w.err = w.file.Write(data)
 }
 
-// @@@ private
-type APPXRawFileWriter struct {
+type appxRawFileWriter struct {
     w *APPXWriter
     dataOffset int64
     uncompressedSize int64
     crc32 uint32
 }
 
-func (f APPXRawFileWriter) finalize(outFile *appxFileInfo) {
+func (f appxRawFileWriter) finalize(outFile *appxFileInfo) {
     outFile.compressedSize = f.w.tell() - f.dataOffset
     outFile.uncompressedSize = f.uncompressedSize
     outFile.crc32 = f.crc32
 }
 
-func (w APPXRawFileWriter) Write(data []byte) (int, error) {
+func (w appxRawFileWriter) Write(data []byte) (int, error) {
     w.w.bytes(data)
     return len(data), w.w.err
 }
 
-// @@@ private
-type APPXStoringFileWriter struct {
+type appxStoringFileWriter struct {
     w *APPXWriter
     dataOffset int64
     crc32 *hash.Hash32
 }
 
-func (f APPXStoringFileWriter) finalize(outFile *appxFileInfo) {
+func (f appxStoringFileWriter) finalize(outFile *appxFileInfo) {
     size := f.w.tell() - f.dataOffset
     outFile.compressedSize = size
     outFile.uncompressedSize = size
     outFile.crc32 = (*f.crc32).Sum32()
 }
 
-func (w APPXStoringFileWriter) Write(data []byte) (int, error) {
+func (w appxStoringFileWriter) Write(data []byte) (int, error) {
     w.w.bytes(data)
     (*w.crc32).Write(data)
     return len(data), w.w.err
 }
 
-// @@@ private
-type APPXDeflatingFileWriter struct {
+type appxDeflatingFileWriter struct {
     w *APPXWriter
 }
 
-func (f APPXDeflatingFileWriter) finalize(outFile *appxFileInfo) {
+func (f appxDeflatingFileWriter) finalize(outFile *appxFileInfo) {
     // @@@
 }
 
-func (w APPXDeflatingFileWriter) Write(data []byte) (int, error) {
+func (w appxDeflatingFileWriter) Write(data []byte) (int, error) {
     w.w.bytes(data)
     return len(data), w.w.err
 }
