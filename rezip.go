@@ -2,12 +2,13 @@ package main
 
 import "archive/zip"
 import "bytes"
+import "encoding/binary"
 import "flag"
+import "fmt"
 import "io"
 import "io/ioutil"
 import "log"
 import "os"
-import "fmt"
 
 func main() {
     var inPath string
@@ -61,13 +62,20 @@ func main() {
     }
 }
 
-type APPXWriter struct {
-    file io.WriterAt
+type WriterSeeker interface {
+    io.Writer
+    io.Seeker
 }
 
-func NewAPPXWriter(file io.WriterAt) APPXWriter {
+type APPXWriter struct {
+    file WriterSeeker
+    err error
+}
+
+func NewAPPXWriter(file WriterSeeker) APPXWriter {
     return APPXWriter{
         file: file,
+        err: nil,
     }
 }
 
@@ -75,10 +83,45 @@ func (w *APPXWriter) Close() error {
     return nil
 }
 
+func (w *APPXWriter) u16(data uint16) {
+    if w.err != nil { return }
+    w.err = binary.Write(w.file, binary.LittleEndian, data)
+}
+
+func (w *APPXWriter) u32(data uint32) {
+    if w.err != nil { return }
+    w.err = binary.Write(w.file, binary.LittleEndian, data)
+}
+
+func (w *APPXWriter) bytes(data []byte) {
+    if w.err != nil { return }
+    _, w.err = w.file.Write(data)
+}
+
 func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
+    // Flags:
+    const sizeInDataDescriptor uint16 = 0x0008
+
+    fileNameBytes := []byte(header.Name)
+
+    // Write the local file header.
+    w.u32(0x04034b50) // local file header signature
+    w.u16(0x002d) // version needed to extract
+    w.u16(sizeInDataDescriptor) // general purpose bit flag
+    w.u16(header.Method) // compression method
+    w.u16(header.ModifiedTime) // last mod file time
+    w.u16(header.ModifiedDate) // last mod file date
+    w.u32(0) // crc-32
+    w.u32(0) // compressed size
+    w.u32(0) // uncompressed size
+    w.u16(uint16(len(fileNameBytes))) // file name length
+    w.u16(0) // extra field length
+    w.bytes(fileNameBytes) // file name
+    // extra field (empty)
+
     return APPXRawFileWriter{
         w: w,
-    }, nil
+    }, w.err
 }
 
 type APPXRawFileWriter struct {
@@ -86,5 +129,6 @@ type APPXRawFileWriter struct {
 }
 
 func (w APPXRawFileWriter) Write(data []byte) (int, error) {
-    return len(data), nil
+    w.w.bytes(data)
+    return len(data), w.w.err
 }
