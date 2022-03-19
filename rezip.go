@@ -105,7 +105,7 @@ type appxCentralDirectoryInfo struct {
 }
 
 func (w *APPXWriter) Close() error {
-    w.writeDataDescriptorIfNeeded()
+    w.finishFileIfNeeded()
 
     var centralDirectoryInfo appxCentralDirectoryInfo
     centralDirectoryInfo.offset = w.tell()
@@ -120,20 +120,7 @@ func (w *APPXWriter) Close() error {
     return nil
 }
 
-func (w *APPXWriter) tell() int64 {
-    if w.err != nil {
-        return 0
-    }
-    offset, err := w.file.Seek(0, io.SeekCurrent)
-    if err != nil {
-        w.err = err
-        return 0
-    }
-    return offset
-}
-
-// @@@ split.
-func (w *APPXWriter) writeDataDescriptorIfNeeded() {
+func (w *APPXWriter) finishFileIfNeeded() {
     if w.currentFile != nil {
         writtenFile := &w.writtenFiles[len(w.writtenFiles) - 1]
         writtenFile.compressedSize = w.tell() - w.currentFile.dataOffset
@@ -141,64 +128,32 @@ func (w *APPXWriter) writeDataDescriptorIfNeeded() {
         //@@@ writtenFile.crc32 = w.currentFile.crc32.Sum32()
         writtenFile.crc32 = w.currentFile.realCRC32
 
-        w.u32(0x08074b50) // data descriptor signature
-        w.u32(writtenFile.crc32) // crc-32
-        w.u64(uint64(writtenFile.compressedSize)) // compressed size
-        w.u64(uint64(writtenFile.uncompressedSize)) // uncompressed size
+        w.writeDataDescriptor(*writtenFile)
 
         w.currentFile = nil
     }
 }
 
-func (w *APPXWriter) u16(data uint16) {
-    if w.err != nil { return }
-    w.err = binary.Write(w.file, binary.LittleEndian, data)
-}
+const zipVersion uint16 = 0x002d
 
-func (w *APPXWriter) u32(data uint32) {
-    if w.err != nil { return }
-    w.err = binary.Write(w.file, binary.LittleEndian, data)
-}
-
-func (w *APPXWriter) u64(data uint64) {
-    if w.err != nil { return }
-    w.err = binary.Write(w.file, binary.LittleEndian, data)
-}
-
-func (w *APPXWriter) bytes(data []byte) {
-    if w.err != nil { return }
-    _, w.err = w.file.Write(data)
-}
-
-var zipVersion uint16 = 0x002d
+// ZIP flags
+const sizeInDataDescriptor uint16 = 0x0008
 
 func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
-    // Flags:
-    const sizeInDataDescriptor uint16 = 0x0008
+    w.finishFileIfNeeded()
 
-    w.writeDataDescriptorIfNeeded()
-
-    fileNameBytes := []byte(header.Name)
-    flags := sizeInDataDescriptor
-    compressionMethod := header.Method
-    lastModFileTime := header.ModifiedTime // @@@
-    lastModFileDate := header.ModifiedDate // @@@
-
-    // Write the local file header.
-    localHeaderOffset := w.tell()
-    w.u32(0x04034b50) // local file header signature
-    w.u16(zipVersion) // version needed to extract
-    w.u16(flags) // general purpose bit flag
-    w.u16(compressionMethod) // compression method
-    w.u16(lastModFileTime) // last mod file time
-    w.u16(lastModFileDate) // last mod file date
-    w.u32(0) // crc-32
-    w.u32(0) // compressed size
-    w.u32(0) // uncompressed size
-    w.u16(uint16(len(fileNameBytes))) // file name length
-    w.u16(0) // extra field length
-    w.bytes(fileNameBytes) // file name
-    // extra field (empty)
+    w.writtenFiles = append(w.writtenFiles, appxWriterWrittenFile{
+        flags: sizeInDataDescriptor,
+        compressionMethod: header.Method,
+        lastModFileTime: header.ModifiedTime, // @@@
+        lastModFileDate: header.ModifiedDate, // @@@
+        crc32: 0,
+        compressedSize: 0,
+        uncompressedSize: 0,
+        fileName: []byte(header.Name),
+        localHeaderOffset: w.tell(),
+    })
+    w.writeLocalFileHeader(w.writtenFiles[len(w.writtenFiles) - 1])
 
     w.currentFile = &appxWriterInProgressFile{
         dataOffset: w.tell(),
@@ -207,22 +162,33 @@ func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
         uncompressedSize: int64(header.UncompressedSize64),
     }
 
-    w.writtenFiles = append(w.writtenFiles, appxWriterWrittenFile{
-        flags: flags,
-        compressionMethod: compressionMethod,
-        lastModFileTime: lastModFileTime,
-        lastModFileDate: lastModFileDate,
-        crc32: 0,
-        compressedSize: 0,
-        uncompressedSize: 0,
-        fileName: fileNameBytes,
-        localHeaderOffset: localHeaderOffset,
-    })
-
     return APPXRawFileWriter{
         w: w,
     }, w.err
 }
+
+func (w *APPXWriter) writeLocalFileHeader(file appxWriterWrittenFile) {
+    w.u32(0x04034b50) // local file header signature
+    w.u16(zipVersion) // version needed to extract
+    w.u16(file.flags) // general purpose bit flag
+    w.u16(file.compressionMethod) // compression method
+    w.u16(file.lastModFileTime) // last mod file time
+    w.u16(file.lastModFileDate) // last mod file date
+    w.u32(0) // crc-32
+    w.u32(0) // compressed size
+    w.u32(0) // uncompressed size
+    w.u16(uint16(len(file.fileName))) // file name length
+    w.u16(0) // extra field length
+    w.bytes(file.fileName) // file name
+    // extra field (empty)
+}
+
+func (w *APPXWriter) writeDataDescriptor(file appxWriterWrittenFile) {
+        w.u32(0x08074b50) // data descriptor signature
+        w.u32(file.crc32) // crc-32
+        w.u64(uint64(file.compressedSize)) // compressed size
+        w.u64(uint64(file.uncompressedSize)) // uncompressed size
+    }
 
 func (w *APPXWriter) writeCentralDirectoryHeader(file *appxWriterWrittenFile) {
     zip64ExtraFieldDataSize := 3*8
@@ -284,6 +250,38 @@ func (w *APPXWriter) writeEndOfCentralDirectoryRecord(centralDirectoryInfo appxC
     w.u32(0xffffffff)                  // size of the central directory   
     w.u32(0xffffffff)                  // offset of start of central directory with respect to the starting disk number        
     w.u16(0)                           // .ZIP file comment length       
+}
+
+func (w *APPXWriter) tell() int64 {
+    if w.err != nil {
+        return 0
+    }
+    offset, err := w.file.Seek(0, io.SeekCurrent)
+    if err != nil {
+        w.err = err
+        return 0
+    }
+    return offset
+}
+
+func (w *APPXWriter) u16(data uint16) {
+    if w.err != nil { return }
+    w.err = binary.Write(w.file, binary.LittleEndian, data)
+}
+
+func (w *APPXWriter) u32(data uint32) {
+    if w.err != nil { return }
+    w.err = binary.Write(w.file, binary.LittleEndian, data)
+}
+
+func (w *APPXWriter) u64(data uint64) {
+    if w.err != nil { return }
+    w.err = binary.Write(w.file, binary.LittleEndian, data)
+}
+
+func (w *APPXWriter) bytes(data []byte) {
+    if w.err != nil { return }
+    _, w.err = w.file.Write(data)
 }
 
 type APPXRawFileWriter struct {
