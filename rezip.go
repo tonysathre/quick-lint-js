@@ -99,15 +99,23 @@ func NewAPPXWriter(file io.WriteSeeker) APPXWriter {
     }
 }
 
+type appxCentralDirectoryInfo struct {
+    offset int64
+    endOffset int64
+}
+
 func (w *APPXWriter) Close() error {
     w.writeDataDescriptorIfNeeded()
 
+    var centralDirectoryInfo appxCentralDirectoryInfo
+    centralDirectoryInfo.offset = w.tell()
     for _, file := range w.writtenFiles {
         w.writeCentralDirectoryHeader(&file)
     }
-    w.writeZip64EndOfCentralDirectoryRecord()
-    w.writeZip64EndOfCentralDirectoryLocator()
-    w.writeEndOfCentralDirectoryRecord()
+    centralDirectoryInfo.endOffset = w.tell()
+    w.writeZip64EndOfCentralDirectoryRecord(centralDirectoryInfo)
+    w.writeZip64EndOfCentralDirectoryLocator(centralDirectoryInfo)
+    w.writeEndOfCentralDirectoryRecord(centralDirectoryInfo)
 
     return nil
 }
@@ -247,27 +255,27 @@ func (w *APPXWriter) writeCentralDirectoryHeader(file *appxWriterWrittenFile) {
     w.u64(uint64(file.localHeaderOffset)) // relative header offset
 }
 
-func (w *APPXWriter) writeZip64EndOfCentralDirectoryRecord() {
+func (w *APPXWriter) writeZip64EndOfCentralDirectoryRecord(centralDirectoryInfo appxCentralDirectoryInfo) {
     w.u32(0x06064b50)                  // zip64 end of central dir signature
-    w.u64(0x42424242)                  // size of zip64 end of central directory record                
+    w.u64(2+2+4+4+8+8+8+8)                  // size of zip64 end of central directory record                
     w.u16(zipVersion)                  // version made by                 
     w.u16(zipVersion)                  // version needed to extract       
     w.u32(0)                           // number of this disk             
     w.u32(0)                           // number of the disk with the start of the central directory  
     w.u64(uint64(len(w.writtenFiles))) // total number of entries in the central directory on this disk  
     w.u64(uint64(len(w.writtenFiles))) // total number of entries in the central directory              
-    w.u64(0x69696969)                  // size of the central directory   
-    w.u64(0xcccccccc)                  // offset of start of central directory with respect to the starting disk number        
+    w.u64(uint64(centralDirectoryInfo.endOffset - centralDirectoryInfo.offset))                  // size of the central directory   
+    w.u64(uint64(centralDirectoryInfo.offset))                  // offset of start of central directory with respect to the starting disk number        
 }
 
-func (w *APPXWriter) writeZip64EndOfCentralDirectoryLocator() {
+func (w *APPXWriter) writeZip64EndOfCentralDirectoryLocator(centralDirectoryInfo appxCentralDirectoryInfo) {
       w.u32(0x07064b50)                // zip64 end of central dir locator signature                       
       w.u32(0)                         // number of the disk with the start of the zip64 end of central directory               
-      w.u64(0xdddddddd)                // relative offset of the zip64 end of central directory record 
+      w.u64(uint64(centralDirectoryInfo.endOffset))                // relative offset of the zip64 end of central directory record 
       w.u32(1)                         // total number of disks           
 }
 
-func (w *APPXWriter) writeEndOfCentralDirectoryRecord() {
+func (w *APPXWriter) writeEndOfCentralDirectoryRecord(centralDirectoryInfo appxCentralDirectoryInfo) {
     w.u32(0x06054b50)                  // end of central dir signature    
     w.u16(0xffff)                           // number of this disk             
     w.u16(0xffff)                           // number of the disk with the start of the central directory
