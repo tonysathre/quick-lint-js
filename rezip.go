@@ -4,11 +4,12 @@ import "archive/zip"
 import "bytes"
 import "encoding/binary"
 import "flag"
-import "fmt"
 import "io"
 import "io/ioutil"
 import "log"
 import "os"
+import "hash"
+import "hash/crc32"
 
 func main() {
     var inPath string
@@ -45,7 +46,7 @@ func main() {
         zipEntry.FileHeader.Extra = nil
         zipEntry.CompressedSize = uint32(zipEntry.CompressedSize64)
         zipEntry.UncompressedSize = uint32(zipEntry.UncompressedSize64)
-        fmt.Printf("%#v\n", zipEntry.FileHeader)
+        //fmt.Printf("@@@ %#v\n", zipEntry.FileHeader)
 
         rawZIPEntryFile, err := zipEntry.OpenRaw()
         if err != nil {
@@ -62,17 +63,22 @@ func main() {
     }
 }
 
-type WriterSeeker interface {
-    io.Writer
-    io.Seeker
-}
-
 type APPXWriter struct {
-    file WriterSeeker
+    file io.WriteSeeker
     err error
+
+    currentFile *appxWriterFile
 }
 
-func NewAPPXWriter(file WriterSeeker) APPXWriter {
+type appxWriterFile struct {
+    name []byte // @@@ not needed?
+    dataOffset int64
+    uncompressedSize int64
+    crc32 hash.Hash32
+    realCRC32 uint32
+}
+
+func NewAPPXWriter(file io.WriteSeeker) APPXWriter {
     return APPXWriter{
         file: file,
         err: nil,
@@ -80,7 +86,34 @@ func NewAPPXWriter(file WriterSeeker) APPXWriter {
 }
 
 func (w *APPXWriter) Close() error {
+    w.writeDataDescriptorIfNeeded()
+
     return nil
+}
+
+func (w *APPXWriter) tell() int64 {
+    if w.err != nil {
+        return 0
+    }
+    offset, err := w.file.Seek(0, io.SeekCurrent)
+    if err != nil {
+        w.err = err
+        return 0
+    }
+    return offset
+}
+
+func (w *APPXWriter) writeDataDescriptorIfNeeded() {
+    if w.currentFile != nil {
+        compressedSize := w.tell() - w.currentFile.dataOffset
+        w.u32(0x08074b50) // data descriptor signature
+        //@@@ w.u32(w.currentFile.crc32.Sum32()) // crc-32
+        w.u32(w.currentFile.realCRC32) // crc-32
+        w.u64(uint64(compressedSize)) // compressed size
+        w.u64(uint64(w.currentFile.uncompressedSize)) // uncompressed size
+
+        w.currentFile = nil
+    }
 }
 
 func (w *APPXWriter) u16(data uint16) {
@@ -93,6 +126,11 @@ func (w *APPXWriter) u32(data uint32) {
     w.err = binary.Write(w.file, binary.LittleEndian, data)
 }
 
+func (w *APPXWriter) u64(data uint64) {
+    if w.err != nil { return }
+    w.err = binary.Write(w.file, binary.LittleEndian, data)
+}
+
 func (w *APPXWriter) bytes(data []byte) {
     if w.err != nil { return }
     _, w.err = w.file.Write(data)
@@ -101,6 +139,8 @@ func (w *APPXWriter) bytes(data []byte) {
 func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
     // Flags:
     const sizeInDataDescriptor uint16 = 0x0008
+
+    w.writeDataDescriptorIfNeeded()
 
     fileNameBytes := []byte(header.Name)
 
@@ -119,6 +159,14 @@ func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
     w.bytes(fileNameBytes) // file name
     // extra field (empty)
 
+    w.currentFile = &appxWriterFile{
+        name: fileNameBytes,
+        dataOffset: w.tell(),
+        crc32: crc32.NewIEEE(),
+        realCRC32: header.CRC32, // @@@
+        uncompressedSize: int64(header.UncompressedSize64),
+    }
+
     return APPXRawFileWriter{
         w: w,
     }, w.err
@@ -130,5 +178,6 @@ type APPXRawFileWriter struct {
 
 func (w APPXRawFileWriter) Write(data []byte) (int, error) {
     w.w.bytes(data)
+    w.w.currentFile.crc32.Write(data)
     return len(data), w.w.err
 }
