@@ -79,8 +79,6 @@ type appxWriterInProgressFile struct {
 }
 
 type appxWriterWrittenFile struct {
-    versionMadeBy uint16
-    versionNeededToExtract uint16
     flags uint16
     compressionMethod uint16
     lastModFileTime uint16
@@ -107,6 +105,9 @@ func (w *APPXWriter) Close() error {
     for _, file := range w.writtenFiles {
         w.writeCentralDirectoryHeader(&file)
     }
+    w.writeZip64EndOfCentralDirectoryRecord()
+    w.writeZip64EndOfCentralDirectoryLocator()
+    w.writeEndOfCentralDirectoryRecord()
 
     return nil
 }
@@ -161,6 +162,8 @@ func (w *APPXWriter) bytes(data []byte) {
     _, w.err = w.file.Write(data)
 }
 
+var zipVersion uint16 = 0x002d
+
 func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
     // Flags:
     const sizeInDataDescriptor uint16 = 0x0008
@@ -168,8 +171,6 @@ func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
     w.writeDataDescriptorIfNeeded()
 
     fileNameBytes := []byte(header.Name)
-    var versionNeededToExtract uint16 = 0x002d
-    var versionMadeBy uint16 = 0x002d
     flags := sizeInDataDescriptor
     compressionMethod := header.Method
     lastModFileTime := header.ModifiedTime // @@@
@@ -178,7 +179,7 @@ func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
     // Write the local file header.
     localHeaderOffset := w.tell()
     w.u32(0x04034b50) // local file header signature
-    w.u16(versionNeededToExtract) // version needed to extract
+    w.u16(zipVersion) // version needed to extract
     w.u16(flags) // general purpose bit flag
     w.u16(compressionMethod) // compression method
     w.u16(lastModFileTime) // last mod file time
@@ -199,8 +200,6 @@ func (w *APPXWriter) CreateRaw(header *zip.FileHeader) (io.Writer, error) {
     }
 
     w.writtenFiles = append(w.writtenFiles, appxWriterWrittenFile{
-        versionMadeBy: versionMadeBy,
-        versionNeededToExtract: versionNeededToExtract,
         flags: flags,
         compressionMethod: compressionMethod,
         lastModFileTime: lastModFileTime,
@@ -221,8 +220,8 @@ func (w *APPXWriter) writeCentralDirectoryHeader(file *appxWriterWrittenFile) {
     zip64ExtraFieldDataSize := 3*8
 
     w.u32(0x02014b50)              // central file header signature
-    w.u16(file.versionMadeBy)          // version made by                 
-    w.u16(file.versionNeededToExtract) // version needed to extract       
+    w.u16(zipVersion)          // version made by                 
+    w.u16(zipVersion) // version needed to extract       
     w.u16(file.flags)                  // general purpose bit flag        
     w.u16(file.compressionMethod)      // compression method              
     w.u16(file.lastModFileTime)             // last mod file time              
@@ -245,7 +244,38 @@ func (w *APPXWriter) writeCentralDirectoryHeader(file *appxWriterWrittenFile) {
     w.u16(uint16(zip64ExtraFieldDataSize)) // data size
     w.u64(uint64(file.uncompressedSize)) // original size
     w.u64(uint64(file.compressedSize)) // compressed size
-    w.u64(0x69696969) // relative header offset
+    w.u64(uint64(file.localHeaderOffset)) // relative header offset
+}
+
+func (w *APPXWriter) writeZip64EndOfCentralDirectoryRecord() {
+    w.u32(0x06064b50)                  // zip64 end of central dir signature
+    w.u64(0x42424242)                  // size of zip64 end of central directory record                
+    w.u16(zipVersion)                  // version made by                 
+    w.u16(zipVersion)                  // version needed to extract       
+    w.u32(0)                           // number of this disk             
+    w.u32(0)                           // number of the disk with the start of the central directory  
+    w.u64(uint64(len(w.writtenFiles))) // total number of entries in the central directory on this disk  
+    w.u64(uint64(len(w.writtenFiles))) // total number of entries in the central directory              
+    w.u64(0x69696969)                  // size of the central directory   
+    w.u64(0xcccccccc)                  // offset of start of central directory with respect to the starting disk number        
+}
+
+func (w *APPXWriter) writeZip64EndOfCentralDirectoryLocator() {
+      w.u32(0x07064b50)                // zip64 end of central dir locator signature                       
+      w.u32(0)                         // number of the disk with the start of the zip64 end of central directory               
+      w.u64(0xdddddddd)                // relative offset of the zip64 end of central directory record 
+      w.u32(1)                         // total number of disks           
+}
+
+func (w *APPXWriter) writeEndOfCentralDirectoryRecord() {
+    w.u32(0x06054b50)                  // end of central dir signature    
+    w.u16(0xffff)                           // number of this disk             
+    w.u16(0xffff)                           // number of the disk with the start of the central directory
+    w.u16(0xffff) // total number of entries in the central directory on this disk  
+    w.u16(0xffff) // total number of entries in the central directory         
+    w.u32(0xffffffff)                  // size of the central directory   
+    w.u32(0xffffffff)                  // offset of start of central directory with respect to the starting disk number        
+    w.u16(0)                           // .ZIP file comment length       
 }
 
 type APPXRawFileWriter struct {
